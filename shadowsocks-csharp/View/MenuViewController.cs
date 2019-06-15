@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -33,8 +32,7 @@ namespace Shadowsocks.View
 
         private bool _isFirstRun;
         private bool _isStartupChecking;
-        private MenuItem enableItem;
-        private MenuItem modeItem;
+        private MenuItem disableItem;
         private MenuItem AutoStartupItem;
         private MenuItem ShareOverLANItem;
         private MenuItem SeperatorItem;
@@ -99,7 +97,7 @@ namespace Shadowsocks.View
                 _isFirstRun = true;
                 ShowConfigForm();
             }
-            else if(config.autoCheckUpdate)
+            else if (config.autoCheckUpdate)
             {
                 _isStartupChecking = true;
                 updateChecker.CheckUpdate(config, 3000);
@@ -134,7 +132,7 @@ namespace Shadowsocks.View
 
         void controller_Errored(object sender, System.IO.ErrorEventArgs e)
         {
-            MessageBox.Show(e.GetException().ToString(), String.Format(I18N.GetString("Shadowsocks Error: {0}"), e.GetException().Message));
+            MessageBox.Show(e.GetException().ToString(), I18N.GetString("Shadowsocks Error: {0}", e.GetException().Message));
         }
 
         #region Tray Icon
@@ -185,8 +183,12 @@ namespace Shadowsocks.View
             string text = I18N.GetString("Shadowsocks") + " " + UpdateChecker.Version + "\n" +
                           (enabled ?
                               I18N.GetString("System Proxy On: ") + (global ? I18N.GetString("Global") : I18N.GetString("PAC")) :
-                              String.Format(I18N.GetString("Running: Port {0}"), config.localPort))  // this feedback is very important because they need to know Shadowsocks is running
+                              I18N.GetString("Running: Port {0}", config.localPort))  // this feedback is very important because they need to know Shadowsocks is running
                           + "\n" + serverInfo;
+            if (text.Length > 127)
+            {
+                text = text.Substring(0, 126 - 3) + "...";
+            }
             ViewUtils.SetNotifyIconText(_notifyIcon, text);
         }
 
@@ -213,9 +215,9 @@ namespace Shadowsocks.View
                         {
                             Color flyBlue = Color.FromArgb(25, 125, 191);
                             // Multiply with flyBlue
-                            int red   = color.R * flyBlue.R / 255;
-                            int green = color.G * flyBlue.G / 255; 
-                            int blue  = color.B * flyBlue.B / 255;
+                            int red = color.R * flyBlue.R / 255;
+                            int green = color.G * flyBlue.G / 255;
+                            int blue = color.B * flyBlue.B / 255;
                             iconCopy.SetPixel(x, y, Color.FromArgb(color.A, red, green, blue));
                         }
                     }
@@ -258,8 +260,8 @@ namespace Shadowsocks.View
         private void LoadMenu()
         {
             this.contextMenu1 = new ContextMenu(new MenuItem[] {
-                this.enableItem = CreateMenuItem("Enable System Proxy", new EventHandler(this.EnableItem_Click)),
-                this.modeItem = CreateMenuGroup("Mode", new MenuItem[] {
+                CreateMenuGroup("System Proxy", new MenuItem[] {
+                    this.disableItem = CreateMenuItem("Disable", new EventHandler(this.EnableItem_Click)),
                     this.PACModeItem = CreateMenuItem("PAC", new EventHandler(this.PACModeItem_Click)),
                     this.globalModeItem = CreateMenuItem("Global", new EventHandler(this.GlobalModeItem_Click))
                 }),
@@ -286,7 +288,7 @@ namespace Shadowsocks.View
                 this.proxyItem = CreateMenuItem("Forward Proxy...", new EventHandler(this.proxyItem_Click)),
                 new MenuItem("-"),
                 this.AutoStartupItem = CreateMenuItem("Start on Boot", new EventHandler(this.AutoStartupItem_Click)),
-                this.ShareOverLANItem = CreateMenuItem("Allow Clients from LAN", new EventHandler(this.ShareOverLANItem_Click)),
+                this.ShareOverLANItem = CreateMenuItem("Allow other Devices to connect", new EventHandler(this.ShareOverLANItem_Click)),
                 new MenuItem("-"),
                 this.hotKeyItem = CreateMenuItem("Edit Hotkeys...", new EventHandler(this.hotKeyItem_Click)),
                 CreateMenuGroup("Help", new MenuItem[] {
@@ -315,8 +317,7 @@ namespace Shadowsocks.View
 
         private void controller_EnableStatusChanged(object sender, EventArgs e)
         {
-            enableItem.Checked = controller.GetConfigurationCopy().enabled;
-            modeItem.Enabled = enableItem.Checked;
+            disableItem.Checked = !controller.GetConfigurationCopy().enabled;
         }
 
         void controller_ShareOverLANStatusChanged(object sender, EventArgs e)
@@ -324,7 +325,8 @@ namespace Shadowsocks.View
             ShareOverLANItem.Checked = controller.GetConfigurationCopy().shareOverLan;
         }
 
-        void controller_VerboseLoggingStatusChanged(object sender, EventArgs e) {
+        void controller_VerboseLoggingStatusChanged(object sender, EventArgs e)
+        {
             VerboseLoggingToggleItem.Checked = controller.GetConfigurationCopy().isVerboseLogging;
         }
 
@@ -367,7 +369,7 @@ namespace Shadowsocks.View
         {
             if (updateChecker.NewVersionFound)
             {
-                ShowBalloonTip(String.Format(I18N.GetString("Shadowsocks {0} Update Found"), updateChecker.LatestVersionNumber + updateChecker.LatestVersionSuffix), I18N.GetString("Click here to update"), ToolTipIcon.Info, 5000);
+                ShowBalloonTip(I18N.GetString("Shadowsocks {0} Update Found", updateChecker.LatestVersionNumber + updateChecker.LatestVersionSuffix), I18N.GetString("Click here to update"), ToolTipIcon.Info, 5000);
             }
             else if (!_isStartupChecking)
             {
@@ -401,10 +403,7 @@ namespace Shadowsocks.View
         {
             Configuration config = controller.GetConfigurationCopy();
             UpdateServersMenu();
-            enableItem.Checked = config.enabled;
-            modeItem.Enabled = config.enabled;
-            globalModeItem.Checked = config.global;
-            PACModeItem.Checked = !config.global;
+            UpdateSystemProxyItemsEnabledStatus(config);
             ShareOverLANItem.Checked = config.shareOverLan;
             VerboseLoggingToggleItem.Checked = config.isVerboseLogging;
             AutoStartupItem.Checked = AutoStartup.Check();
@@ -433,7 +432,7 @@ namespace Shadowsocks.View
             }
 
             // user wants a seperator item between strategy and servers menugroup
-            items.Add( i++, new MenuItem("-") );
+            items.Add(i++, new MenuItem("-"));
 
             int strategyCount = i;
             Configuration configuration = controller.GetConfigurationCopy();
@@ -584,7 +583,7 @@ namespace Shadowsocks.View
 
         private void notifyIcon1_Click(object sender, MouseEventArgs e)
         {
-            if ( e.Button == MouseButtons.Middle )
+            if (e.Button == MouseButtons.Middle)
             {
                 ShowLogForm();
             }
@@ -600,17 +599,40 @@ namespace Shadowsocks.View
 
         private void EnableItem_Click(object sender, EventArgs e)
         {
-            controller.ToggleEnable(!enableItem.Checked);
+            controller.ToggleEnable(false);
+            Configuration config = controller.GetConfigurationCopy();
+            UpdateSystemProxyItemsEnabledStatus(config);
+        }
+
+        private void UpdateSystemProxyItemsEnabledStatus(Configuration config)
+        {
+            disableItem.Checked = !config.enabled;
+            if (!config.enabled)
+            {
+                globalModeItem.Checked = false;
+                PACModeItem.Checked = false;
+            }
+            else
+            {
+                globalModeItem.Checked = config.global;
+                PACModeItem.Checked = !config.global;
+            }
         }
 
         private void GlobalModeItem_Click(object sender, EventArgs e)
         {
+            controller.ToggleEnable(true);
             controller.ToggleGlobal(true);
+            Configuration config = controller.GetConfigurationCopy();
+            UpdateSystemProxyItemsEnabledStatus(config);
         }
 
         private void PACModeItem_Click(object sender, EventArgs e)
         {
+            controller.ToggleEnable(true);
             controller.ToggleGlobal(false);
+            Configuration config = controller.GetConfigurationCopy();
+            UpdateSystemProxyItemsEnabledStatus(config);
         }
 
         private void ShareOverLANItem_Click(object sender, EventArgs e)
@@ -646,9 +668,10 @@ namespace Shadowsocks.View
             controller.SelectStrategy((string)item.Tag);
         }
 
-        private void VerboseLoggingToggleItem_Click( object sender, EventArgs e ) {
-            VerboseLoggingToggleItem.Checked = ! VerboseLoggingToggleItem.Checked;
-            controller.ToggleVerboseLogging( VerboseLoggingToggleItem.Checked );
+        private void VerboseLoggingToggleItem_Click(object sender, EventArgs e)
+        {
+            VerboseLoggingToggleItem.Checked = !VerboseLoggingToggleItem.Checked;
+            controller.ToggleVerboseLogging(VerboseLoggingToggleItem.Checked);
         }
 
         private void StatisticsConfigItem_Click(object sender, EventArgs e)
@@ -707,7 +730,7 @@ namespace Shadowsocks.View
                             {
                                 splash.FormClosed += splash_FormClosed;
                             }
-                            else if (result.Text.StartsWith("http://") || result.Text.StartsWith("https://"))
+                            else if (result.Text.ToLower().StartsWith("http://") || result.Text.ToLower().StartsWith("https://"))
                             {
                                 _urlToOpen = result.Text;
                                 splash.FormClosed += openURLFromQRCode;
@@ -738,7 +761,7 @@ namespace Shadowsocks.View
                             splash.Location = new Point(screen.Bounds.X, screen.Bounds.Y);
                             // we need a panel because a window has a minimal size
                             // TODO: test on high DPI
-                            splash.TargetRect = new Rectangle((int)minX + screen.Bounds.X, (int)minY + screen.Bounds.Y, (int)maxX - (int)minX, (int)maxY - (int)minY);
+                            splash.TargetRect = new Rectangle((int)minX, (int)minY, (int)maxX - (int)minX, (int)maxY - (int)minY);
                             splash.Size = new Size(fullImage.Width, fullImage.Height);
                             splash.Show();
                             return;
